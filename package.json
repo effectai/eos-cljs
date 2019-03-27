@@ -7,6 +7,13 @@
         "scatterjs-core": "^2.7.16",
         "scatterjs-plugin-eosjs2": "^1.5.0"
     },
+    "directories": {
+        "lib": "src/"
+    },
+    "files": [
+        "src/*"
+    ],
+    "version": "0.0.1",
     "scripts": {
         "start": "./node_modules/.bin/lumo -D org.clojure/tools.cli:0.3.7 -c src -m eos-deploys.core"
     }
