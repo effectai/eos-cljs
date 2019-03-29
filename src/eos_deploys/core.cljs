@@ -9,10 +9,9 @@
    [util :refer [TextEncoder TextDecoder]]
    [node-fetch :as fetch]))
 
-;; (def rpc-url "http://a105440894b5a11e9a27d027e8e4054e-98b15ae5d3166434.elb.eu-west-1.amazonaws.com:8888")
 (def rpc-url "http://localhost:8888")
 (def priv-key "5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR")
-
+(def pub-key "EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4")
 
 (defn prnj "Javascript console.log shorthand" [m] (.log js/console m))
 
@@ -100,12 +99,12 @@
       :data {:creator creator
              :name name
              :owner {:threshold 1
-                     :keys [{:key "EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4"
+                     :keys [{:key pub-key
                              :weight 1}]
                      :accounts []
                      :waits []}
              :active {:threshold 1
-                      :keys [{:key "EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4"
+                      :keys [{:key pub-key
                               :weight 1}]
                       :accounts []
                       :waits []}}}]}
@@ -122,7 +121,7 @@
       :data {:account account
              :permission permission
              :parent "owner"
-             :auth {:keys [{:key "EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4"
+             :auth {:keys [{:key pub-key
                             :weight 1}]
                     :threshold 1
                     :accounts [{:permission {:actor delegate
