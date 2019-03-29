@@ -59,18 +59,3 @@
         "table"
         (.then (eos/get-table-rows "test" "test" "nep5")
                prn))))
-
-  ;; (case (first args)
-    ;; "deploy" (prn "wtf")
-  ;; (prn "haha"))
-
-  ;; (prn args)
-  ;; (deploy "/home/jesse/repos/effectai/docker-eos/effect.contracts/contracts/effect.token/effect.token" "jesse")
-  ;; (-> {:actions [{:account "jesse" :name "create" :authorization [{:actor "jesse" :permission "active"}]
-  ;;                 :data {:issuer "jesse" :maximum_supply "100.0000 SYS" :memo "bic"}}]}
-  ;;     clj->js
-  ;;     (as-> tx (.transact api tx #js {:blocksBehind 0 :expireSeconds 5}))
-  ;;     (.then #(prn %)))
-  ;; (-> (transact "jesse" "issue" {:to "jesse" :quantity "1.0000 SYS" :memo "bic"} )
-  ;; (.then #(prn %))))
-  )
