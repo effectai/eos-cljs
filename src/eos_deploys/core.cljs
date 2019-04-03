@@ -111,25 +111,26 @@
    clj->js
    (as-> tx (.transact api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5}))))
 
-(defn update-auth [account permission delegate delegate-permission]
-  (->
-   {:actions
-    [{:account "eosio"
-      :name "updateauth"
-      :authorization [{:actor account
-                       :permission "owner"}]
-      :data {:account account
-             :permission permission
-             :parent "owner"
-             :auth {:keys [{:key pub-key
-                            :weight 1}]
-                    :threshold 1
-                    :accounts [{:permission {:actor delegate
-                                             :permission delegate-permission}
-                                :weight 1}]
-                    :waits []}}}]}
-   clj->js
-   (as-> tx (.transact api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5}))))
+(defn update-auth
+  ([account permission delegate delegate-permission]
+   (update-auth account permission [{:permission {:actor delegate :permission delegate-permission}
+                                     :weight 1}]))
+  ([account permission delegates]
+   (->
+    {:actions
+     [{:account "eosio"
+       :name "updateauth"
+       :authorization [{:actor account
+                        :permission "owner"}]
+       :data {:account account
+              :permission permission
+              :parent "owner"
+              :auth {:keys []
+                     :threshold 1
+                     :accounts delegates
+                     :waits []}}}]}
+    clj->js
+    (as-> tx (.transact api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5})))))
 
 
 (defn transact
