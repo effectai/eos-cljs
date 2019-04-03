@@ -111,6 +111,9 @@
    clj->js
    (as-> tx (.transact api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5}))))
 
+(defn random-account [prefix]
+  (str prefix (reduce str (map apply (repeat 5 #(rand-nth ["a" "b" "c" "d" "e" "f" "g" "h"]))))))
+
 (defn update-auth
   ([account permission delegate delegate-permission]
    (update-auth account permission [{:permission {:actor delegate :permission delegate-permission}
