@@ -10,34 +10,48 @@
    [node-fetch :as fetch]))
 
 (def rpc-url "http://localhost:8888")
-(def priv-key "5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR")
-(def pub-key "EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4")
+(def priv-key "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3")
+(def pub-key "EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV")
 
 (defn prnj "Javascript console.log shorthand" [m] (.log js/console m))
 
 (def msg-contract-exist "contract is already running this version of code")
 
-(def rpc (JsonRpc. rpc-url #js {:fetch fetch}))
-(def sig-provider (JsSignatureProvider. #js [priv-key]))
-(def api (Api. #js {:rpc rpc
-                    ;; Optionally provide an authorization
-                    ;; controller. It will collect the available public
-                    ;; keys for signing.
-                    ;; :authorityProvider #js {"getRequiredKeys" (fn [tx avail] #js ["EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4"])}
-                    :signatureProvider sig-provider
-                    :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)}))
+
+(defn make-api [{:keys [rpc-url priv-keys]}]
+  (let [sig-provider (JsSignatureProvider. (clj->js priv-keys))
+        rpc (JsonRpc. rpc-url #js {:fetch fetch})]
+    (Api. #js {:rpc rpc
+               ;; Optionally provide an authorization
+               ;; controller. It will collect the available public
+               ;; keys for signing.
+               ;; :authorityProvider #js {"getRequiredKeys" (fn [tx avail] #js ["EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4"])}
+               :signatureProvider sig-provider
+               :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)})))
+
+(def apis {:local {:rpc-url "https://localhost:8888"
+                   :priv-keys ["5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR"]}})
+
+(def api (atom (make-api {:rpc-url rpc-url :priv-keys [priv-key]})))
+
+(defn set-api!
+  ([net]
+   (reset! api (make-api (net apis))))
+  ([rpc-url priv-keys]
+   (reset! api (make-api {:rpc-url rpc-url :priv-keys priv-keys}))))
 
 (defn get-table-rows [account scope table]
-  (-> (.get_table_rows rpc #js {:code account :scope scope :table table
-                                :limit 10})
+  (-> (.get_table_rows (.-rpc @api) #js {:code account :scope scope :table table
+                                         :limit 10})
       (.then js->clj)
       (.then #(get % "rows"))))
+
 (defn get-table-row [account scope table id]
   (->
-   (.get_table_rows rpc #js {:code account :scope scope :table table
-                             :lower_bound id
-                             :upper_bound id
-                             :limit 10})
+   (.get_table_rows (.-rpc @api) #js {:code account :scope scope :table table
+                                      :lower_bound id
+                                      :upper_bound id
+                                      :limit 10})
    (.then js->clj)
    (.then #(get % "rows"))
    (.then first)))
@@ -55,11 +69,11 @@
   "Read a contract binary abi and wasm into a map"
   [file]
   (let [buffer (new (.-SerialBuffer Serialize)
-                    #js {:textEncoder (.-textEncoder api)
-                         :textDecoder (.-textDecoder api)})
+                    #js {:textEncoder (.-textEncoder @api)
+                         :textDecoder (.-textDecoder @api)})
         wasm (.toString (fs/readFileSync (str file ".wasm")) "hex")
         abi (.parse js/JSON (fs/readFileSync (str file ".abi") "utf8"))
-        abi-def (.get (.-abiTypes api) "abi_def")
+        abi-def (.get (.-abiTypes @api) "abi_def")
         abi-complete (clj->js (complete-abi abi-def abi))]
     (.serialize abi-def buffer abi-complete)
     {:wasm wasm
@@ -83,7 +97,7 @@
                  :data {:account account
                         :abi abi}}]}
      clj->js
-     (as-> tx (.transact api tx
+     (as-> tx (.transact @api tx
                          #js {:sign true
                               :broadcast true
                               :blocksBehind 0
@@ -109,7 +123,7 @@
                       :accounts []
                       :waits []}}}]}
    clj->js
-   (as-> tx (.transact api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5}))))
+   (as-> tx (.transact @api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5}))))
 
 (defn random-account [prefix]
   (str prefix (reduce str (map apply (repeat 5 #(rand-nth ["a" "b" "c" "d" "e" "f" "g" "h"]))))))
@@ -133,7 +147,7 @@
                      :accounts delegates
                      :waits []}}}]}
     clj->js
-    (as-> tx (.transact api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5})))))
+    (as-> tx (.transact @api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5})))))
 
 
 (defn transact
@@ -144,14 +158,13 @@
                    :authorization auths
                    :data data}]}
        clj->js
-       (as-> tx (.transact api tx #js {:blocksBehind 0 :expireSeconds 1}))
-       (.catch #(prn %))
-       )))
+       (as-> tx (.transact @api tx #js {:blocksBehind 0 :expireSeconds 1})))))
 
 (defn wait-block
   "For now waitblock is a static timeout"
-  [a]
-  (js/Promise. (fn [resolve reject] (js/setTimeout (fn [] (resolve a)) 500))))
+  [p]
+  (.then p
+         #(js/Promise. (fn [resolve reject] (js/setTimeout (fn [] (resolve %)) 500)))))
 
 
 (defn tx-get-console
