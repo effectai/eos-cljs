@@ -35,10 +35,8 @@
 (def api (atom (make-api {:rpc-url rpc-url :priv-keys [priv-key]})))
 
 (defn set-api!
-  ([net]
-   (reset! api (make-api (net apis))))
-  ([rpc-url priv-keys]
-   (reset! api (make-api {:rpc-url rpc-url :priv-keys priv-keys}))))
+  ([a]
+   (reset! api (make-api a))))
 
 (defn get-table-rows [account scope table]
   (-> (.get_table_rows (.-rpc @api) #js {:code account :scope scope :table table
@@ -85,7 +83,7 @@
      {:actions [{:account "eosio"
                  :name "setcode"
                  :authorization [{:actor account
-                                  :permission "active"}]
+                                  :permission "owner"}]
                  :data {:account account
                         :vmtype 0
                         :vmversion 0
@@ -93,7 +91,7 @@
                 {:account "eosio"
                  :name "setabi"
                  :authorization [{:actor account
-                                  :permission "active"}]
+                                  :permission "owner"}]
                  :data {:account account
                         :abi abi}}]}
      clj->js
@@ -151,14 +149,16 @@
 
 
 (defn transact
+  ([actions]
+   (-> {:actions actions}
+       clj->js
+       (as-> tx (.transact @api tx #js {:blocksBehind 0 :expireSeconds 1}))))
   ([account name data] (transact account name data
                                  [{:actor account :permission "active"}]))
   ([account name data auths]
-   (-> {:actions [{:account account :name name
+   (-> (transact [{:account account :name name
                    :authorization auths
-                   :data data}]}
-       clj->js
-       (as-> tx (.transact @api tx #js {:blocksBehind 0 :expireSeconds 1})))))
+                   :data data}]))))
 
 (defn wait-block
   "For now waitblock is a static timeout"
