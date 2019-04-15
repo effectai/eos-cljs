@@ -162,9 +162,10 @@
 
 (defn wait-block
   "For now waitblock is a static timeout"
-  [p]
-  (.then p
-         #(js/Promise. (fn [resolve reject] (js/setTimeout (fn [] (resolve %)) 500)))))
+  ([p] (wait-block p 1))
+  ([p n]
+   (.then p
+          #(js/Promise. (fn [resolve reject] (js/setTimeout (fn [] (resolve %)) (* n 500)))))))
 
 
 (defn tx-get-console
