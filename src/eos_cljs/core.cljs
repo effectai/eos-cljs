@@ -1,4 +1,4 @@
-(ns eos-deploys.core
+(ns eos-cljs.core
   (:require
    [eosjs :refer [Api JsonRpc RpcError]]
    [eosjs :refer [Serialize]]
@@ -30,7 +30,9 @@
                :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)})))
 
 (def apis {:local {:rpc-url "https://localhost:8888"
-                   :priv-keys ["5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR"]}})
+                   :priv-keys ["5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR"]}
+           :jungle {:rpc-url "http://a4903032c523311e9acf0068515e584b-4e2aafacf4bb783e.elb.eu-west-1.amazonaws.com:8888"
+                    :priv-keys []}})
 
 (def api (atom (make-api {:rpc-url rpc-url :priv-keys [priv-key]})))
 
@@ -77,29 +79,36 @@
     {:wasm wasm
      :abi (.toString (->> buffer .asUint8Array (.from js/Buffer)) "hex")}))
 
-(defn deploy [account file]
-  (let [{:keys [abi wasm]} (read-contract file)]
-    (->
-     {:actions [{:account "eosio"
-                 :name "setcode"
-                 :authorization [{:actor account
-                                  :permission "owner"}]
-                 :data {:account account
-                        :vmtype 0
-                        :vmversion 0
-                        :code wasm}}
-                {:account "eosio"
-                 :name "setabi"
-                 :authorization [{:actor account
-                                  :permission "owner"}]
-                 :data {:account account
-                        :abi abi}}]}
-     clj->js
-     (as-> tx (.transact @api tx
-                         #js {:sign true
-                              :broadcast true
-                              :blocksBehind 0
-                              :expireSeconds 5})))))
+(def deploy-opts {:sign? true
+                  :broadcast? true
+                  :expire-sec 5})
+
+(defn deploy
+  ([account file] (deploy account file {}))
+  ([account file opts]
+   (let [{:keys [abi wasm]} (read-contract file)]
+     (let [{:keys [sign? broadcast? expire-sec]} (merge deploy-opts opts)]
+       (->
+        {:actions [{:account "eosio"
+                    :name "setcode"
+                    :authorization [{:actor account
+                                     :permission "owner"}]
+                    :data {:account account
+                           :vmtype 0
+                           :vmversion 0
+                           :code wasm}}
+                   {:account "eosio"
+                    :name "setabi"
+                    :authorization [{:actor account
+                                     :permission "owner"}]
+                    :data {:account account
+                           :abi abi}}]}
+        clj->js
+        (as-> tx (.transact @api tx
+                            #js {:sign sign?
+                                 :broadcast broadcast?
+                                 :blocksBehind 0
+                                 :expireSeconds expire-sec})))))))
 
 (defn create-account [creator name]
   (->
@@ -174,3 +183,10 @@
   (try
     (aget tx "processed" "action_traces" 0 "console")
     (catch js/Error e "")))
+
+
+(defn sign-tx [serialized-tx chain-id pub]
+  (let [sig-provider (.-signatureProvider @api)]
+    (.sign sig-provider #js {"chainId" chain-id
+                             "requiredKeys" #js [pub]
+                             "serializedTransaction" serialized-tx})))

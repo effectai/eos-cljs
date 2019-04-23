@@ -1,6 +1,7 @@
 {
-    "name": "eos-deploys",
+    "name": "eos-cljs",
     "dependencies": {
+        "@jeisses/tools.cli": "0.4.2-2",
         "eosjs": "^20.0.0-ba6d627.0",
         "lumo-cljs": "^1.9.0",
         "node-fetch": "^2.3.0",
@@ -15,6 +16,6 @@
     ],
     "version": "0.0.1",
     "scripts": {
-        "start": "lumo -D org.clojure/tools.cli:0.3.7 -c src -m eos-deploys.cli"
+        "start": "lumo -c src -m eos-cljs.cli"
     }
 }
