@@ -14,28 +14,34 @@
 (defn usage [options-summary]
   (->> ["This is a CLI interface to `nodeos` for local development"
         ""
-        "Commands:"
-        commands
-        ""
         "Options:"
         options-summary
         ""
         "Actions:"
-        "  deploy      Deploy a smart contract"]
+        "  deploy      Deploy a smart contract"
+        "  sign        Sign a serialized transaction"
+        "  broadcast   Publish a signed transaction to the blockchain"]
        (string/join "\n")))
 
 (def cli-options
-  [["-a" "--account NAME" "EOS account name"
+  [["-n" "--net NAME" (str "The EOSIO network to use " (map name (keys eos/apis)))
+    :default :local
+    :validate [#(contains? eos/apis %)]
+    :parse-fn keyword]
+   ["-a" "--account NAME" "EOS account name"
     :validate [#(<= 3 (count %)) "Specify at least 2 chars for account"]]
    ["-p" "--path PATH" "Path to smart contract to deploy"
     :validate [#(fs/existsSync (str % ".wasm")) "WASM file could not be fond"]]
    [nil "--write FILE" "Write the transaction to a file. Does not broadcast it."]
+   [nil "--pub PUBLIC_KEY" "The public key of the keypair to use for signing"]
+   [nil "--priv FILE" "An EDN file with private keys to load into the signature provider"
+    :validate [fs/existsSync "file does not exist"]]
    ["-h" "--help"]])
 
 (defn validate-args [args]
   (let [{:keys [options arguments errors summary] :as ee} (parse-opts args cli-options)]
     (cond
-      (:help options) {:error (usage summary)}
+      (:help options) {:error (usage summary) :options options}
       errors {:error (string/join "\n" errors)}
       (commands (first arguments))
       {:action (first arguments) :options options :args (rest arguments)}
@@ -55,39 +61,50 @@
 ;; npm start --silent -- -a sjoerd action checktx rawtx 0000000090e39a96e6459ad319b89e83839189580794a54cd7390b78ab9b526fe08c6af000a150b846bc3c1760966739707632d141762309285066cd9f89fa1c073461361e44f85bc2c62d00451baf6bd4f06d5c4e4e04879cfe60ba3b296b1ff08f112f6071756f
 (defn -main [& args]
   (let [{:keys [error action args options]} (validate-args args)]
-    (if error
-      (do (eos/prnj error) (.exit js/process 0))
-      (case action
-        "deploy"
-        (let [broadcast? (not (contains? options :write))]
-          (->
-           (eos/deploy (:account options) (:path options) {:broadcast? broadcast?
-                                                           :expire-sec 3500})
-           (.then #(if broadcast?
-                     (do (prn %))
-                     (do
-                       (fs/writeFileSync
-                        (:write options)
-                        (.from js/Buffer (.-serializedTransaction %)))
-                       (println "> Transaction saved to " (:write options) "\n"))))))
-        "sign"
-        (let [tx (->> (:write options) fs/readFileSync js/Uint8Array.)
-              sig-file (str (:write options) ".sig")]
-          (.then
-           (eos/sign-tx tx chain-id eos/pub-key)
-           #(do (fs/writeFileSync sig-file (pr-str (js->clj (.-signatures %))))
-                (println "Signatures saved to " sig-file))))
-        "broadcast"
-        (let [tx (->> (:write options) fs/readFileSync js/Uint8Array.)
-              sig-file (str (:write options) ".sig")
-              sigs (-> sig-file (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
-              signed-tx (clj->js {:signatures sigs
-                                  :serializedTransaction tx})]
-          (-> (.pushSignedTransaction @eos/api signed-tx)
-              (.then prn)))
-        "action"
+    (prn options)
+
+    (when error
+      (do (eos/prnj error) (.exit js/process 0)))
+
+    ;; load any custom private keys into the api
+    (let [api-new ((:net options) eos/apis)]
+      (if (:priv options)
+        (let [priv-keys (-> (:priv options) (fs/readFileSync #js {:encoding "UTF-8"})
+                            edn/read-string)]
+          (eos/set-api! (assoc api-new :priv-keys priv-keys)))
+        (eos/set-api! api-new)))
+
+    (case action
+      "deploy"
+      (let [broadcast? (not (contains? options :write))]
         (->
-         (eos/transact (:account options) (first args) (parse-action-arg-array (rest args)))
-         (.then #(do (eos/prnj %)
-                     (eos/prnj (str "----\n console:\n----\n"
-                                    (aget % "processed" "action_traces" 0 "console"))))))))))
+         (eos/deploy (:account options) (:path options)
+                     {:broadcast? broadcast? :expire-sec 3500})
+         (.then #(if broadcast?
+                   (do (prn %))
+                   (do
+                     (fs/writeFileSync
+                      (:write options)
+                      (.from js/Buffer (.-serializedTransaction %)))
+                     (println "> Transaction saved to " (:write options) "\n"))))))
+      "sign"
+      (let [tx (->> (:write options) fs/readFileSync js/Uint8Array.)
+            sig-file (str (:write options) ".sig")]
+        (.then
+         (eos/sign-tx tx chain-id eos/pub-key)
+         #(do (fs/writeFileSync sig-file (pr-str (js->clj (.-signatures %))))
+              (println "Signatures saved to " sig-file))))
+      "broadcast"
+      (let [tx (->> (:write options) fs/readFileSync js/Uint8Array.)
+            sig-file (str (:write options) ".sig")
+            sigs (-> sig-file (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
+            signed-tx (clj->js {:signatures sigs
+                                :serializedTransaction tx})]
+        (-> (.pushSignedTransaction @eos/api signed-tx)
+            (.then prn)))
+      "action"
+      (->
+       (eos/transact (:account options) (first args) (parse-action-arg-array (rest args)))
+       (.then #(do (eos/prnj %)
+                   (eos/prnj (str "----\n console:\n----\n"
+                                  (aget % "processed" "action_traces" 0 "console")))))))))

@@ -29,9 +29,11 @@
                :signatureProvider sig-provider
                :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)})))
 
-(def apis {:local {:rpc-url "https://localhost:8888"
+(def apis {:local {:rpc-url "http://localhost:8888"
+                   :chain-id "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f"
                    :priv-keys ["5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR"]}
            :jungle {:rpc-url "http://a4903032c523311e9acf0068515e584b-4e2aafacf4bb783e.elb.eu-west-1.amazonaws.com:8888"
+                    :chain-id "e70aaab8997e1dfce58fbfac80cbbb8fecec7b99cf982a9444273cbc64c41473"
                     :priv-keys []}})
 
 (def api (atom (make-api {:rpc-url rpc-url :priv-keys [priv-key]})))
