@@ -163,10 +163,15 @@
 
 
 (defn transact
-  ([actions]
-   (-> {:actions actions}
-       clj->js
-       (as-> tx (.transact @api tx #js {:blocksBehind 0 :expireSeconds 1}))))
+  ([actions opts]
+   (let [{:keys [sign? broadcast? expire-sec] :as pp} (merge transact-opts opts)]
+     (-> {:actions actions}
+         clj->js
+         (as-> tx (.transact @api tx #js {:sign sign?
+                                          :broadcast broadcast?
+                                          :blocksBehind 0
+                                          :expireSeconds expire-sec})))))
+  ([actions] (transact actions {}))
   ([account name data] (transact account name data
                                  [{:actor account :permission "active"}]))
   ([account name data auths]

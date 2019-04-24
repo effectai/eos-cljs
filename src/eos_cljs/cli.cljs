@@ -4,6 +4,7 @@
    [clojure.tools.cli :refer [parse-opts]]
    fs
    util
+   [eosjs-ecc :as ecc :refer [sha256]]
    [cljs.pprint :refer [pprint]]
    [cljs.reader :as edn]
    [clojure.string :as string]
@@ -33,7 +34,10 @@
    ["-p" "--path PATH" "Path to smart contract to deploy"
     ;; :validate [#(fs/existsSync (str % ".wasm")) "WASM file could not be fond"]
     ]
+   [nil "--print" "Print transaction objects"]
    [nil "--write FILE" "Write the transaction to a file. Does not broadcast it."]
+   [nil "--format FORMAT" "Format of transaction output when (greymass, bin)"
+    :default "bin"]
    [nil "--pub PUBLIC_KEY" "The public key of the keypair to use for signing"]
    [nil "--priv FILE" "An EDN file with private keys to load into the signature provider"
     :validate [fs/existsSync "file does not exist"]]
@@ -55,15 +59,89 @@
   [col]
   (reduce (fn [m [param val]] (assoc m param val)) {} (partition 2 col)))
 
-;; localnet chain id
-(def chain-id "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f")
+(defmulti format-transaction (fn [type serialized-tx txid] type))
 
-;; example run:
-;; npm start --silent -- -a sjoerd action checktx rawtx 0000000090e39a96e6459ad319b89e83839189580794a54cd7390b78ab9b526fe08c6af000a150b846bc3c1760966739707632d141762309285066cd9f89fa1c073461361e44f85bc2c62d00451baf6bd4f06d5c4e4e04879cfe60ba3b296b1ff08f112f6071756f
+(defmethod format-transaction "greymass"
+  [_ serialized-tx txid]
+  (js/JSON.stringify
+   (clj->js
+    {"transaction"
+     "contract" false
+     {"transaction_id" txid
+      "broadcast" false
+      "transaction"
+      {"compression" "none"
+       "transaction"
+       (js->clj
+        (.deserializeTransaction @eos/api serialized-tx))
+       "signatures" []}}})))
+
+(defmethod format-transaction "bin" [_ tx txid] (js/Buffer.from tx))
+(defmethod format-transaction "json" [_ tx txid]
+  (js/JSON.stringify (.deserializeTransaction @eos/api tx)))
+
+(defn- handle-transact [res options]
+  (let [broadcast? (not (or (contains? options :write)
+                            (:print options)))]
+    (if broadcast?
+      (prn res)
+      (let [tx (.-serializedTransaction res)
+            chain-id (:chain-id ((:net options) eos/apis))
+            txid (->> #js [(js/Buffer.from chain-id "hex")
+                           (js/Buffer.from (.-serializedTransaction res))
+                           (js/Buffer.from (js/Uint8Array. 32))]
+                      (.concat js/Buffer)
+                      sha256)
+            tx-string (format-transaction (:format options) tx txid)]
+        (when (:print options)
+          (println tx-string))
+        (when (contains? options :write)
+          (fs/writeFileSync (:write options) tx-string)
+          (println "Transaction saved to " (:write options)))))))
+
+(defmulti command
+  "Each method handles a cli action"
+  (fn [action args options] action))
+
+(defmethod command "deploy" [_ args options]
+  (let [broadcast? (not (contains? options :write))]
+    (->
+     (eos/deploy (:account options) (:path options)
+                 {:broadcast? broadcast? :sign? broadcast? :expire-sec 3500})
+     (.then #(handle-transact % options)))))
+
+(defmethod command "sign" [_ args options]
+  (let [tx (->> (:path options) fs/readFileSync js/Uint8Array.)
+        sig-file (str (:path options) ".sig")]
+    (.then
+     (eos/sign-tx tx (:chain-id ((:net options) eos/apis)) (:pub options))
+     #(do (fs/writeFileSync sig-file (pr-str (js->clj (.-signatures %))))
+          (println "Signatures saved to " sig-file)))))
+
+(defmethod command "broadcast" [_ args options]
+  (let [tx (->> (:path options) fs/readFileSync js/Uint8Array.)
+        sig-file (str (:path options) ".sig")
+        sigs (-> sig-file (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
+        signed-tx (clj->js {:signatures sigs
+                            :serializedTransaction tx})]
+    (-> (.pushSignedTransaction @eos/api signed-tx)
+        (.then prn))))
+
+(defmethod command "action" [_ args options]
+  (let [broadcast? (not (or (contains? options :write)
+                            (:print options)))
+        action-promise
+        (if (:path options)
+          (let [actions (-> (:path options) (fs/readFileSync #js {:encoding "UTF-8"})
+                            edn/read-string)]
+            (eos/transact actions {:broadcast? broadcast? :sign? false :expire-sec 3500}))
+          (eos/transact (:account options) (first args) (parse-action-arg-array (rest args))))]
+    (->
+     action-promise
+     (.then #(handle-transact % options)))))
+
 (defn -main [& args]
   (let [{:keys [error action args options]} (validate-args args)]
-    (prn options)
-
     (when error
       (do (eos/prnj error) (.exit js/process 0)))
 
@@ -75,48 +153,4 @@
           (eos/set-api! (assoc api-new :priv-keys priv-keys)))
         (eos/set-api! api-new)))
 
-    (case action
-      "deploy"
-      (let [broadcast? (not (contains? options :write))]
-        (->
-         (eos/deploy (:account options) (:path options)
-                     {:broadcast? broadcast? :sign? broadcast? :expire-sec 3500})
-         (.then #(if broadcast?
-                   (do (prn %))
-                   (do
-                     (fs/writeFileSync
-                      (:write options)
-                      (.from js/Buffer (.-serializedTransaction %)))
-                     (println "> Transaction saved to " (:write options) "\n"))))))
-      "sign"
-      (let [tx (->> (:write options) fs/readFileSync js/Uint8Array.)
-            sig-file (str (:write options) ".sig")]
-        (.then
-         (eos/sign-tx tx (:chain-id ((:net options) eos/apis)) (:pub options))
-         #(do (fs/writeFileSync sig-file (pr-str (js->clj (.-signatures %))))
-              (println "Signatures saved to " sig-file))))
-      "broadcast"
-      (let [tx (->> (:write options) fs/readFileSync js/Uint8Array.)
-            sig-file (str (:write options) ".sig")
-            sigs (-> sig-file (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
-            signed-tx (clj->js {:signatures sigs
-                                :serializedTransaction tx})]
-        (-> (.pushSignedTransaction @eos/api signed-tx)
-            (.then prn)))
-      "action"
-      (let [broadcast? (not (contains? options :write))
-            action-promise
-            (if (:path options)
-              (let [actions (-> (:path options) (fs/readFileSync #js {:encoding "UTF-8"})
-                                edn/read-string)]
-                (eos/transact actions {:broadcast? broadcast? :sign? false :expire-sec 3500}))
-              (eos/transact (:account options) (first args) (parse-action-arg-array (rest args))))]
-        (->
-         action-promise
-         (.then #(if broadcast?
-                   (do (prn %))
-                   (do
-                     (fs/writeFileSync
-                      (:write options)
-                      (.from js/Buffer (.-serializedTransaction %)))
-                     (println "> Transaction saved to " (:write options) "\n")))))))))
+    (command action args options)))
