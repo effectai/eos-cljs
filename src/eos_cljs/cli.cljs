@@ -31,7 +31,8 @@
    ["-a" "--account NAME" "EOS account name"
     :validate [#(<= 3 (count %)) "Specify at least 2 chars for account"]]
    ["-p" "--path PATH" "Path to smart contract to deploy"
-    :validate [#(fs/existsSync (str % ".wasm")) "WASM file could not be fond"]]
+    ;; :validate [#(fs/existsSync (str % ".wasm")) "WASM file could not be fond"]
+    ]
    [nil "--write FILE" "Write the transaction to a file. Does not broadcast it."]
    [nil "--pub PUBLIC_KEY" "The public key of the keypair to use for signing"]
    [nil "--priv FILE" "An EDN file with private keys to load into the signature provider"
@@ -79,7 +80,7 @@
       (let [broadcast? (not (contains? options :write))]
         (->
          (eos/deploy (:account options) (:path options)
-                     {:broadcast? broadcast? :expire-sec 3500})
+                     {:broadcast? broadcast? :sign? broadcast? :expire-sec 3500})
          (.then #(if broadcast?
                    (do (prn %))
                    (do
@@ -91,7 +92,7 @@
       (let [tx (->> (:write options) fs/readFileSync js/Uint8Array.)
             sig-file (str (:write options) ".sig")]
         (.then
-         (eos/sign-tx tx chain-id eos/pub-key)
+         (eos/sign-tx tx (:chain-id ((:net options) eos/apis)) (:pub options))
          #(do (fs/writeFileSync sig-file (pr-str (js->clj (.-signatures %))))
               (println "Signatures saved to " sig-file))))
       "broadcast"
@@ -103,8 +104,19 @@
         (-> (.pushSignedTransaction @eos/api signed-tx)
             (.then prn)))
       "action"
-      (->
-       (eos/transact (:account options) (first args) (parse-action-arg-array (rest args)))
-       (.then #(do (eos/prnj %)
-                   (eos/prnj (str "----\n console:\n----\n"
-                                  (aget % "processed" "action_traces" 0 "console")))))))))
+      (let [broadcast? (not (contains? options :write))
+            action-promise
+            (if (:path options)
+              (let [actions (-> (:path options) (fs/readFileSync #js {:encoding "UTF-8"})
+                                edn/read-string)]
+                (eos/transact actions {:broadcast? broadcast? :sign? false :expire-sec 3500}))
+              (eos/transact (:account options) (first args) (parse-action-arg-array (rest args))))]
+        (->
+         action-promise
+         (.then #(if broadcast?
+                   (do (prn %))
+                   (do
+                     (fs/writeFileSync
+                      (:write options)
+                      (.from js/Buffer (.-serializedTransaction %)))
+                     (println "> Transaction saved to " (:write options) "\n")))))))))

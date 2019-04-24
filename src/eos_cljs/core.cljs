@@ -81,15 +81,15 @@
     {:wasm wasm
      :abi (.toString (->> buffer .asUint8Array (.from js/Buffer)) "hex")}))
 
-(def deploy-opts {:sign? true
-                  :broadcast? true
-                  :expire-sec 5})
+(def transact-opts {:sign? true
+                    :broadcast? true
+                    :expire-sec 5})
 
 (defn deploy
   ([account file] (deploy account file {}))
   ([account file opts]
    (let [{:keys [abi wasm]} (read-contract file)]
-     (let [{:keys [sign? broadcast? expire-sec]} (merge deploy-opts opts)]
+     (let [{:keys [sign? broadcast? expire-sec]} (merge transact-opts opts)]
        (->
         {:actions [{:account "eosio"
                     :name "setcode"
