@@ -38,6 +38,8 @@
    [nil "--write FILE" "Write the transaction to a file. Does not broadcast it."]
    [nil "--format FORMAT" "Format of transaction output when (greymass, bin)"
     :default "bin"]
+   [nil "--sign" "Signs the transaction"
+    :default false]
    [nil "--pub PUBLIC_KEY" "The public key of the keypair to use for signing"]
    [nil "--priv FILE" "An EDN file with private keys to load into the signature provider"
     :validate [fs/existsSync "file does not exist"]]
@@ -65,8 +67,8 @@
   [_ serialized-tx txid]
   (js/JSON.stringify
    (clj->js
-    {"transaction"
-     "contract" false
+    {"contract" false
+     "transaction"
      {"transaction_id" txid
       "broadcast" false
       "transaction"
@@ -76,7 +78,7 @@
         (.deserializeTransaction @eos/api serialized-tx))
        "signatures" []}}})))
 
-(defmethod format-transaction "bin" [_ tx txid] (js/Buffer.from tx))
+(defmethod format-transaction "bin" [_ tx _] (js/Buffer.from tx))
 (defmethod format-transaction "json" [_ tx txid]
   (js/JSON.stringify (.deserializeTransaction @eos/api tx)))
 
@@ -107,7 +109,7 @@
   (let [broadcast? (not (contains? options :write))]
     (->
      (eos/deploy (:account options) (:path options)
-                 {:broadcast? broadcast? :sign? broadcast? :expire-sec 3500})
+                 {:broadcast? broadcast? :sign? (:sign options) :expire-sec 3500})
      (.then #(handle-transact % options)))))
 
 (defmethod command "sign" [_ args options]
@@ -134,7 +136,7 @@
         (if (:path options)
           (let [actions (-> (:path options) (fs/readFileSync #js {:encoding "UTF-8"})
                             edn/read-string)]
-            (eos/transact actions {:broadcast? broadcast? :sign? false :expire-sec 3500}))
+            (eos/transact actions {:broadcast? broadcast? :sign? (:sign options) :expire-sec 3500}))
           (eos/transact (:account options) (first args) (parse-action-arg-array (rest args))))]
     (->
      action-promise
