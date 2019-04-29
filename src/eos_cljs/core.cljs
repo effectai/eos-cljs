@@ -61,6 +61,10 @@
    (.then #(get % "rows"))
    (.then first)))
 
+(defn get-scheduled-txs []
+  (.then (.fetch (.-rpc @api) "/v1/chain/get_scheduled_transactions")
+         #(js->clj % :keywordize-keys true)))
+
 (defn complete-abi
   "Fill a partial `abi` object will all the possible fields defined in
   `abi-definition`"
