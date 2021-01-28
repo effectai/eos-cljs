@@ -31,15 +31,20 @@
 
 (def apis {:local {:rpc-url "http://localhost:8888"
                    :chain-id "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f"
-                   :priv-keys ["5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR"]}
+                   :priv-keys ["5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR"
+                               "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3"]}
            :jungle {:rpc-url "http://jungle2.cryptolions.io:80"
                     :chain-id "e70aaab8997e1dfce58fbfac80cbbb8fecec7b99cf982a9444273cbc64c41473"
                     :priv-keys []}
            :mainnet {:rpc-url "https://public.eosinfra.io"
                      :chain-id "aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906"
-                     :priv-keys []}})
+                     :priv-keys []}
+           :kylin {;:rpc-url "https://api.kylin.alohaeos.com"
+                   :rpc-url "http://kylin.meet.one:8888"
+                   :chain-id "5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191"
+                   :priv-keys []} })
 
-(def api (atom (make-api {:rpc-url rpc-url :priv-keys [priv-key]})))
+(def api (atom (make-api (:local apis))))
 
 (defn set-api!
   ([a]
@@ -90,7 +95,7 @@
 
 (def transact-opts {:sign? true
                     :broadcast? true
-                    :expire-sec 5})
+                    :expire-sec 20})
 
 (defn deploy
   ([account file] (deploy account file {}))
@@ -163,7 +168,7 @@
                      :accounts delegates
                      :waits []}}}]}
     clj->js
-    (as-> tx (.transact @api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 5})))))
+    (as-> tx (.transact @api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 50})))))
 
 
 (defn transact
