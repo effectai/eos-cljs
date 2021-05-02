@@ -9,7 +9,6 @@
    [util :refer [TextEncoder TextDecoder]]
    [node-fetch :as fetch]))
 
-(def rpc-url "http://localhost:8888")
 (def priv-key "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3")
 (def pub-key "EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV")
 
@@ -29,7 +28,7 @@
                :signatureProvider sig-provider
                :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)})))
 
-(def apis {:local {:rpc-url "http://localhost:8888"
+(def apis {:local {:rpc-url "http://127.0.0.1:8888"
                    :chain-id "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f"
                    :priv-keys ["5Jmsawgsp1tQ3GD6JyGCwy1dcvqKZgX6ugMVMdjirx85iv5VyPR"
                                "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3"]}
