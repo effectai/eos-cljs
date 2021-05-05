@@ -149,10 +149,9 @@
   (str prefix (reduce str (map apply (repeat 5 #(rand-nth ["a" "b" "c" "d" "e" "f" "g" "h"]))))))
 
 (defn update-auth
-  ([account permission delegate delegate-permission]
-   (update-auth account permission [{:permission {:actor delegate :permission delegate-permission}
-                                     :weight 1}]))
   ([account permission delegates]
+   (update-auth account permission "owner" delegates))
+  ([account permission parent-permission delegates]
    (->
     {:actions
      [{:account "eosio"
@@ -161,14 +160,13 @@
                         :permission "owner"}]
        :data {:account account
               :permission permission
-              :parent "owner"
+              :parent parent-permission
               :auth {:keys []
                      :threshold 1
                      :accounts delegates
                      :waits []}}}]}
     clj->js
     (as-> tx (.transact @api tx #js {:sign true :broadcast true :blocksBehind 0 :expireSeconds 50})))))
-
 
 (defn transact
   ([actions opts]
