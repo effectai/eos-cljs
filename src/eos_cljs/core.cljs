@@ -1,13 +1,9 @@
 (ns eos-cljs.core
   (:require
-   [eosjs :refer [Api JsonRpc RpcError]]
-   [eosjs :refer [Serialize]]
+   [eosjs :refer [Api JsonRpc RpcError Serialize]]
    ["eosjs/dist/eosjs-jssig" :refer [JsSignatureProvider]]
-   fs
    [cljs.pprint :refer [pprint]]
-   [clojure.string :as string]
-   [util :refer [TextEncoder TextDecoder]]
-   [node-fetch :as fetch]))
+   [clojure.string :as string]))
 
 (def priv-key "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3")
 (def pub-key "EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV")
@@ -16,17 +12,17 @@
 
 (def msg-contract-exist "contract is already running this version of code")
 
-
-(defn make-api [{:keys [rpc-url priv-keys]}]
+(defn make-api
+  "Create an API object that can be used for RPC interactions in the browser."
+  [{:keys [rpc-url priv-keys]}]
   (let [sig-provider (JsSignatureProvider. (clj->js priv-keys))
-        rpc (JsonRpc. rpc-url #js {:fetch fetch})]
+        rpc (JsonRpc. rpc-url)]
     (Api. #js {:rpc rpc
                ;; Optionally provide an authorization
                ;; controller. It will collect the available public
                ;; keys for signing.
                ;; :authorityProvider #js {"getRequiredKeys" (fn [tx avail] #js ["EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4"])}
-               :signatureProvider sig-provider
-               :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)})))
+               :signatureProvider sig-provider})))
 
 (def apis {:local {:rpc-url "http://127.0.0.1:8888"
                    :chain-id "cf057bbfb72640471fd910bcb67639c22df9f92470936cddc1ade0e2f2e7dc4f"
@@ -35,19 +31,19 @@
            :jungle {:rpc-url "http://jungle2.cryptolions.io:80"
                     :chain-id "e70aaab8997e1dfce58fbfac80cbbb8fecec7b99cf982a9444273cbc64c41473"
                     :priv-keys []}
-           :mainnet {:rpc-url "https://public.eosinfra.io"
-                     :chain-id "aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906"
-                     :priv-keys []}
-           :kylin {;:rpc-url "https://api.kylin.alohaeos.com"
-                   :rpc-url "http://kylin.meet.one:8888"
+           :kylin {:rpc-url "https://api.kylin.alohaeos.com"
                    :chain-id "5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191"
-                   :priv-keys []} })
+                   :priv-keys []}
+           :mainnet {:rpc-url "https://eos.greymass.com"
+                     ;;:rpc-url "https://nodes.get-scatter.com"
+                     ;; :rpc-url "https://eu.eosdac.io"
+                     :chain-id "aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906"
+                     :priv-keys []}})
 
-(def api (atom (make-api (:local apis))))
+(defonce api (atom (make-api (:local apis))))
 
 (defn set-api!
-  ([a]
-   (reset! api (make-api a))))
+  ([a] (reset! api (make-api a))))
 
 (defn get-table-rows [account scope table]
   (-> (.get_table_rows (.-rpc @api) #js {:code account :scope scope :table table
@@ -65,6 +61,9 @@
    (.then #(get % "rows"))
    (.then first)))
 
+(defn get-account [account]
+  (.get_account (.-rpc @api) account))
+
 (defn get-scheduled-txs []
   (.then (.fetch (.-rpc @api) "/v1/chain/get_scheduled_transactions")
          #(js->clj % :keywordize-keys true)))
@@ -78,34 +77,20 @@
      (assoc m field (or (get m field) [])))
    (js->clj abi) (js->clj (.-fields abi-definition))))
 
-(defn read-contract
-  "Read a contract binary abi and wasm into a map"
-  [file]
-  (let [buffer (new (.-SerialBuffer Serialize)
-                    #js {:textEncoder (.-textEncoder @api)
-                         :textDecoder (.-textDecoder @api)})
-        wasm (.toString (fs/readFileSync (str file ".wasm")) "hex")
-        abi (.parse js/JSON (fs/readFileSync (str file ".abi") "utf8"))
-        abi-def (.get (.-abiTypes @api) "abi_def")
-        abi-complete (clj->js (complete-abi abi-def abi))]
-    (.serialize abi-def buffer abi-complete)
-    {:wasm wasm
-     :abi (.toString (->> buffer .asUint8Array (.from js/Buffer)) "hex")}))
-
 (def transact-opts {:sign? true
                     :broadcast? true
                     :expire-sec 20})
 
 (defn deploy
-  ([account file] (deploy account file {}))
-  ([account file opts]
-   (let [{:keys [abi wasm]} (read-contract file)]
+  ([account contract] (deploy account contract {}))
+  ([account contract opts]
+   (let [{:keys [abi wasm]} contract]
      (let [{:keys [sign? broadcast? expire-sec]} (merge transact-opts opts)]
        (->
         {:actions [{:account "eosio"
                     :name "setcode"
                     :authorization [{:actor account
-                                     :permission "owner"}]
+                                     :permission "active"}]
                     :data {:account account
                            :vmtype 0
                            :vmversion 0
@@ -113,7 +98,7 @@
                    {:account "eosio"
                     :name "setabi"
                     :authorization [{:actor account
-                                     :permission "owner"}]
+                                     :permission "active"}]
                     :data {:account account
                            :abi abi}}]}
         clj->js

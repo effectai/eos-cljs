@@ -1,6 +1,7 @@
 (ns eos-cljs.cli
   (:require
    [eos-cljs.core :as eos]
+   [eos-cljs.node-api :as eos-nodejs]
    [clojure.tools.cli :refer [parse-opts]]
    fs
    util
@@ -86,7 +87,6 @@
   (let [broadcast? (not (or (contains? options :write)
                             (:print options)))]
     (if broadcast?
-      (prn res)
       (let [tx (.-serializedTransaction res)
             chain-id (:chain-id ((:net options) eos/apis))
             txid (->> #js [(js/Buffer.from chain-id "hex")
@@ -108,13 +108,15 @@
 (defmethod command "deploy" [_ args options]
   (let [broadcast? (not (contains? options :write))]
     (->
-     (eos/deploy (:account options) (:path options)
-                 {:broadcast? broadcast? :sign? (:sign options) :expire-sec 3500})
+     (eos-nodejs/deploy
+      (:account options) (:path options)
+      {:broadcast? broadcast? :sign? (:sign options) :expire-sec 3600})
      (.then #(handle-transact % options)))))
 
 (defmethod command "sign" [_ args options]
   (let [tx (->> (:path options) fs/readFileSync js/Uint8Array.)
         sig-file (str (:path options) ".sig")]
+    (prn "=> SIGNING TX WITH PUB KEY " (:pub options))
     (.then
      (eos/sign-tx tx (:chain-id ((:net options) eos/apis)) (:pub options))
      #(do (fs/writeFileSync sig-file (pr-str (js->clj (.-signatures %))))
@@ -126,18 +128,24 @@
         sigs (-> sig-file (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
         signed-tx (clj->js {:signatures sigs
                             :serializedTransaction tx})]
-    (-> (.pushSignedTransaction @eos/api signed-tx)
-        (.then prn))))
+    (try
+      (-> (.pushSignedTransaction @eos/api signed-tx)
+          (.catch #(prn "CAUGHT EXCEPTOIN " %))
+          (.then prn)))))
 
 (defmethod command "action" [_ args options]
   (let [broadcast? (not (or (contains? options :write)
                             (:print options)))
         action-promise
         (if (:path options)
-          (let [actions (-> (:path options) (fs/readFileSync #js {:encoding "UTF-8"})
+          (let [actions (-> (:path options)
+                            (fs/readFileSync #js {:encoding "UTF-8"})
                             edn/read-string)]
-            (eos/transact actions {:broadcast? broadcast? :sign? (:sign options) :expire-sec 3500}))
-          (eos/transact (:account options) (first args) (parse-action-arg-array (rest args))))]
+            (eos/transact actions {:broadcast? broadcast?
+                                   :sign? (:sign options)
+                                   :expire-sec 3500}))
+          (eos/transact (:account options) (first args)
+                        (parse-action-arg-array (rest args))))]
     (->
      action-promise
      (.then #(handle-transact % options)))))
@@ -152,7 +160,7 @@
       (if (:priv options)
         (let [priv-keys (-> (:priv options) (fs/readFileSync #js {:encoding "UTF-8"})
                             edn/read-string)]
-          (eos/set-api! (assoc api-new :priv-keys priv-keys)))
-        (eos/set-api! api-new)))
+          (reset! eos/api (eos-nodejs/make-api (assoc api-new :priv-keys priv-keys))))
+        (reset eos/api (eos-nodejs/make-api api-new))))
 
     (command action args options)))
