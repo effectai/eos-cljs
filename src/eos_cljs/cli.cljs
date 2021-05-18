@@ -108,7 +108,7 @@
 (defmethod command "deploy" [_ args options]
   (let [broadcast? (not (contains? options :write))]
     (->
-     (eos-nodejs/deploy
+     (eos-nodejs/deploy-file
       (:account options) (:path options)
       {:broadcast? broadcast? :sign? (:sign options) :expire-sec 3600})
      (.then #(handle-transact % options)))))
@@ -161,6 +161,6 @@
         (let [priv-keys (-> (:priv options) (fs/readFileSync #js {:encoding "UTF-8"})
                             edn/read-string)]
           (reset! eos/api (eos-nodejs/make-api (assoc api-new :priv-keys priv-keys))))
-        (reset eos/api (eos-nodejs/make-api api-new))))
+        (reset! eos/api (eos-nodejs/make-api api-new))))
 
     (command action args options)))
