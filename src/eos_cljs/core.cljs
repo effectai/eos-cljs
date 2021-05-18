@@ -21,7 +21,8 @@
                ;; Optionally provide an authorization
                ;; controller. It will collect the available public
                ;; keys for signing.
-               ;; :authorityProvider #js {"getRequiredKeys" (fn [tx avail] #js ["EOS7ijWCBmoXBi3CgtK7DJxentZZeTkeUnaSDvyro9dq7Sd1C3dC4"])}
+               ;; :authorityProvider
+               ;; #js {"getRequiredKeys" (fn [tx avail] #js [pub-key])}
                :signatureProvider sig-provider})))
 
 (def apis {:local {:rpc-url "http://127.0.0.1:8888"
@@ -35,8 +36,6 @@
                    :chain-id "5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191"
                    :priv-keys []}
            :mainnet {:rpc-url "https://eos.greymass.com"
-                     ;;:rpc-url "https://nodes.get-scatter.com"
-                     ;; :rpc-url "https://eu.eosdac.io"
                      :chain-id "aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906"
                      :priv-keys []}})
 
@@ -45,13 +44,21 @@
 (defn set-api!
   ([a] (reset! api (make-api a))))
 
-(defn get-table-rows [account scope table]
-  (-> (.get_table_rows (.-rpc @api) #js {:code account :scope scope :table table
-                                         :limit 10})
-      (.then js->clj)
-      (.then #(get % "rows"))))
+(defn get-table-rows
+  ([account scope table] (get-table-rows account scope table {}))
+  ([account scope table opts]
+   (let [default-opts {:reverse false :limit 10}]
+     (-> (.get_table_rows
+          (.-rpc @api)
+          (clj->js (merge
+                    default-opts
+                    opts
+                    {:code account :scope scope :table table})))
+         (.then js->clj)
+         (.then #(get % "rows"))))))
 
-(defn get-table-row [account scope table id]
+(defn get-table-row
+  [account scope table id]
   (->
    (.get_table_rows (.-rpc @api) #js {:code account :scope scope :table table
                                       :lower_bound id
@@ -186,7 +193,8 @@
     (catch js/Error e "")))
 
 
-(defn sign-tx [serialized-tx chain-id pub]
+(defn sign-tx
+  [serialized-tx chain-id pub]
   (let [sig-provider (.-signatureProvider @api)]
     (.sign sig-provider #js {"chainId" chain-id
                              "requiredKeys" #js [pub]
