@@ -87,6 +87,7 @@
   (let [broadcast? (not (or (contains? options :write)
                             (:print options)))]
     (if broadcast?
+      (prn res)
       (let [tx (.-serializedTransaction res)
             chain-id (:chain-id ((:net options) eos/apis))
             txid (->> #js [(js/Buffer.from chain-id "hex")
