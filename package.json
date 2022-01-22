@@ -4,7 +4,7 @@
         "@jeisses/tools.cli": "0.4.2-2",
         "eosjs": "^20.0.3",
         "lumo-cljs": "^1.9.0",
-        "node-fetch": "^2.6.1"
+        "node-fetch": "^3.1.1"
     },
     "directories": {
         "lib": "src/"
