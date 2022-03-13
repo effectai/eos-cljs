@@ -18,9 +18,14 @@
                :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)})))
 
 (defn set-api!
-  "Sets the global EOS api endpoint to: :mainnet :local :jungle :kylin"
-  [api]
-  (reset! eos/api (make-api (api eos/apis))))
+  "Sets the global EOS api endpoint to: :mainnet :local :jungle :kylin
+
+  Extra api config can be passed as a map. It's often useful to pass custom
+  signing keys as {:priv-keys [\"PRV...\"]}"
+  ([api] (set-api! api {}))
+  ([api extra-config]
+   (let [api-config (api eos/apis)]
+     (reset! eos/api (make-api (merge api-config extra-config))))))
 
 ;; override the default API with a NodeJS compatible instance
 (set-api! :local)
