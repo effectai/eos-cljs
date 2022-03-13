@@ -2,7 +2,7 @@
     "name": "eos-cljs",
     "dependencies": {
         "@jeisses/tools.cli": "0.4.2-2",
-        "eosjs": "^20.0.3",
+        "eosjs": "^22.1.0",
         "lumo-cljs": "^1.9.0",
         "node-fetch": "^2.6.1"
     },
