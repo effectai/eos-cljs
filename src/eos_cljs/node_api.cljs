@@ -1,5 +1,6 @@
 (ns eos-cljs.node-api
   (:require
+   [crypto :as crypto]
    [eosjs :refer [Api JsonRpc RpcError Serialize]]
    ["eosjs/dist/eosjs-jssig" :refer [JsSignatureProvider]]
    fs
@@ -16,8 +17,13 @@
                :signatureProvider sig-provider
                :textDecoder (TextDecoder.) :textEncoder (TextEncoder.)})))
 
-;; we have to override the default API with a NodeJS compatible instance
-(reset! eos/api (make-api (:local eos/apis)))
+(defn set-api!
+  "Sets the global EOS api endpoint to: :mainnet :local :jungle :kylin"
+  [api]
+  (reset! eos/api (make-api (api eos/apis))))
+
+;; override the default API with a NodeJS compatible instance
+(set-api! :local)
 
 (defn read-contract
   "Read a contract binary abi and wasm into a map.
@@ -38,3 +44,11 @@
 (defn deploy-file
   ([account contract] (deploy-file account contract {}))
   ([account contract opts] (eos/deploy account (read-contract contract) opts)))
+
+(defn get-file-hash
+  "Return the sha256 hash of a file on the filesystem"
+  [path]
+  (let [file-buffer (fs/readFileSync path)
+        hash-sum (crypto/createHash "sha256")]
+    (.update hash-sum file-buffer)
+    (.digest hash-sum "hex")))

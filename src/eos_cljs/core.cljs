@@ -5,6 +5,7 @@
    [cljs.pprint :refer [pprint]]
    [clojure.string :as string]))
 
+;; These are just testing keys that are public
 (def priv-key "5KQwrPbwdL6PhXujxW37FSSQZ1JiwsST4cqQzDeyXtP79zkvFD3")
 (def pub-key "EOS6MRyAjQq8ud7hVNYcfnVPJqcVpscN5So8BhtHuGYqET5GDW5CV")
 
@@ -74,6 +75,10 @@
 (defn get-scheduled-txs []
   (.then (.fetch (.-rpc @api) "/v1/chain/get_scheduled_transactions")
          #(js->clj % :keywordize-keys true)))
+
+(defn get-code-hash [account]
+  (.then (.get_code_hash (.-rpc @api) account)
+         #(:code_hash (js->clj % :keywordize-keys true))))
 
 (defn complete-abi
   "Fill a partial `abi` object will all the possible fields defined in
